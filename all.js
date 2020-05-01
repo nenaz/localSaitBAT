@@ -85,10 +85,14 @@ function requestsDB() {
 
     const requesInterval = 200;
     const intervalId = setInterval(() => {
-      const request = currentQueue.front();
-      request.then((response) => {
-        // console.log('response', response);
-        responseToDB(dataBase, response);
+      const element = currentQueue.front();
+      const{ options, fileName } = element;
+      rp(options).then((response) => {
+        console.log('response', response);
+        responseToDB(dataBase, {
+          response,
+          fileName,
+        });
       });
       currentQueue.dequeue();
       if (currentQueue.isEmpty()) {
@@ -116,17 +120,21 @@ fs.readdir(testFolder, (err, files) => {
       },
       json: true,
     };
-    const promise = new Promise((resolve, reject) => {
-      rp(options).then((response) => {
-        resolve({
-          response,
-          fileName: file,
-        });
-      });
-    })
-    currentQueue.enqueue(promise);
+    // const promise = new Promise((resolve, reject) => {
+    //   rp(options).then((response) => {
+    //     resolve({
+    //       response,
+    //       fileName: file,
+    //     });
+    //   });
+    // })
+    currentQueue.enqueue({
+      options,
+      fileName: file,
+    });
     return false;
   });
+  currentQueue.print();
 
   requestsDB();
 });
