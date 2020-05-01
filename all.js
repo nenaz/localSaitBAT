@@ -5,8 +5,8 @@ const fs = require('fs');
 import convert  from 'xml-js';
 require('dotenv').config();
 
-// const testFolder = process.env.ROOT_FILMS_FOLDER;
-const testFolder = 'C:/Users/mr444/Downloads/';
+const testFolder = process.env.ROOT_FILMS_FOLDER;
+// const testFolder = 'C:/Users/mr444/Downloads/';
 const kpInfoUrl = process.env.KP_INFO_URL;
 const kpRatingUrl = process.env.KP_RATING_URL;
 const kpHeaderName = process.env.KP_HEADER_NAME;
@@ -58,36 +58,78 @@ function Queue() {
     return collection.length
   }
 }
-// const fileName = 'Грань будущего(505851).mkv';
-// const kpId = fileName.match(/\(\d+\)/g)[0].match(/\d+/g)[0];
-// const options = {
-//   uri: `${kpRatingUrl}/${kpId}.xml`,
-//   // headers: {
-//   //   [kpHeaderName]: kpHeaderValue
-//   // },
-//   json: true,
-// };
-const array = [326,435,448,329,535341,447301,389];
-const testQueue = new Queue();
-array.map((item) => {
-  const kpId = item;
-  const options = {
-    uri: `${kpRatingUrl}/${kpId}.xml`,
-    // headers: {
-    //   [kpHeaderName]: kpHeaderValue
-    // },
-    json: true,
-  };
-  const promise = new Promise((resolve, reject) => {
-    rp(options).then((response) => {
-      resolve(response);
-    });
-  })
-  testQueue.enqueue(promise);
-  return false;
-});
 
-console.log(testQueue.size());
+function responseToDB(dataBase, data) {
+  const { fileName, response } = data;
+  dataBase.collection('films').insertOne({
+    ...response.data,
+    fileName,
+    kp_rating: response.rating.rating,
+    imdb_rating: response.rating.ratingImdb,
+  }, (err, result) => {
+    console.log('add');
+    if (err) {
+      console.log('SUCCESS');
+    } else {
+      console.log('ERROR', err);
+    }
+  });
+};
+
+function requestsDB() {
+  MongoClient.connect(url, {
+    useUnifiedTopology: true,
+  }, (err, client) => {
+    console.log(err);
+    const dataBase = client.db(dbName);
+
+    const requesInterval = 200;
+    const intervalId = setInterval(() => {
+      const request = currentQueue.front();
+      request.then((response) => {
+        // console.log('response', response);
+        responseToDB(dataBase, response);
+      });
+      currentQueue.dequeue();
+      if (currentQueue.isEmpty()) {
+        clearInterval(intervalId);
+        client.close();
+      }
+    }, requesInterval);
+  });
+};
+
+const currentQueue = new Queue();
+// console.log(testQueue.size());
+fs.readdir(testFolder, (err, files) => {
+  // console.log('files', files);
+  const currentFiles = files.filter((fileName) => {
+    return (regMp4.test(fileName) || regMkv.test(fileName)) && (/\(\d+\)/g).test(fileName);
+  });
+  currentFiles.map((file) => {
+    const kpId = file.match(/\(\d+\)/g)[0].match(/\d+/g)[0];
+    const options = {
+      uri: `${kpInfoUrl}/api/v2.1/films/${kpId}?append_to_response=RATING,EXTERNAL_ID`,
+      // uri: `${kpRatingUrl}/${kpId}.xml`,
+      headers: {
+        [kpHeaderName]: kpHeaderValue
+      },
+      json: true,
+    };
+    const promise = new Promise((resolve, reject) => {
+      rp(options).then((response) => {
+        resolve({
+          response,
+          fileName: file,
+        });
+      });
+    })
+    currentQueue.enqueue(promise);
+    return false;
+  });
+
+  requestsDB();
+});
 
 // MongoClient.connect(url, {
 //   useUnifiedTopology: true,
@@ -132,13 +174,13 @@ console.log(testQueue.size());
 //   // client.close();
 // });
 
-const intervalId = setInterval(() => {
-  const request = testQueue.front();
-  request.then((response) => {
-    console.log('response', response);
-  });
-  testQueue.dequeue();
-  if (testQueue.isEmpty()) {
-    clearInterval(intervalId);
-  }
-}, 150);
+// const intervalId = setInterval(() => {
+//   const request = testQueue.front();
+//   request.then((response) => {
+//     console.log('response', response);
+//   });
+//   testQueue.dequeue();
+//   if (testQueue.isEmpty()) {
+//     clearInterval(intervalId);
+//   }
+// }, 150);
