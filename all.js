@@ -2,10 +2,12 @@ import { MongoClient } from "mongodb";
 import { url } from "./config/db";
 import rp from 'request-promise';
 const fs = require('fs');
-import convert  from 'xml-js';
+import request from 'request';
+// import convert  from 'xml-js';
 require('dotenv').config();
 
 const testFolder = process.env.ROOT_FILMS_FOLDER;
+const imageFolder = process.env.ROOT_IMAGE_FOLDER;
 // const testFolder = 'C:/Users/mr444/Downloads/';
 const kpInfoUrl = process.env.KP_INFO_URL;
 const kpRatingUrl = process.env.KP_RATING_URL;
@@ -89,6 +91,13 @@ function requestsDB() {
       const{ options, fileName } = element;
       rp(options).then((response) => {
         console.log('response', response);
+        const { data } = response;
+        const { posterUrl, filmId } = data;
+        download(
+          // `https://st.kp.yandex.net/images/film_big/${kpId}.jpg`,
+          posterUrl,
+          `${imageFolder}${filmId}.webp`,
+          () => {});
         responseToDB(dataBase, {
           response,
           fileName,
@@ -103,10 +112,17 @@ function requestsDB() {
   });
 };
 
+function download(uri, filename, callback) {
+  request.head(uri, (err, res, body) => {
+    console.log('content-type:', res.headers['content-type']);
+    console.log('content-length:', res.headers['content-length']);
+
+    request(uri).pipe(fs.createWriteStream(filename)).on('close', callback);
+  });
+};
+
 const currentQueue = new Queue();
-// console.log(testQueue.size());
 fs.readdir(testFolder, (err, files) => {
-  // console.log('files', files);
   const currentFiles = files.filter((fileName) => {
     return (regMp4.test(fileName) || regMkv.test(fileName)) && (/\(\d+\)/g).test(fileName);
   });
@@ -120,14 +136,6 @@ fs.readdir(testFolder, (err, files) => {
       },
       json: true,
     };
-    // const promise = new Promise((resolve, reject) => {
-    //   rp(options).then((response) => {
-    //     resolve({
-    //       response,
-    //       fileName: file,
-    //     });
-    //   });
-    // })
     currentQueue.enqueue({
       options,
       fileName: file,
@@ -138,57 +146,3 @@ fs.readdir(testFolder, (err, files) => {
 
   requestsDB();
 });
-
-// MongoClient.connect(url, {
-//   useUnifiedTopology: true,
-// }, (err, client) => {
-//   console.log(err);
-//   fs.readdir(testFolder, (err, files) => {
-//     files.map(fileName => {
-//       if ((regMp4.test(fileName) || regMkv.test(fileName)) && (/\(\d+\)/g).test(fileName)) {
-//         console.log('fileName', fileName);
-//         const kpId = fileName.match(/\(\d+\)/g)[0].match(/\d+/g)[0];
-//         const options = {
-//           uri: `${kpInfoUrl}/api/v2.1/films/${kpId}?append_to_response=RATING,EXTERNAL_ID`,
-//           headers: {
-//             [kpHeaderName]: kpHeaderValue
-//           },
-//           json: true,
-//         };
-//         rp(options).then((repos) => {
-//           const dataBase = client.db(dbName);
-//           dataBase.collection('films').insertOne({
-//             ...repos.data,
-//             fileName,
-//             kp_rating: repos.rating.rating,
-//             imdb_rating: repos.rating.ratingImdb,
-//           }, (err, result) => {
-//             console.log('add');
-//             if (err) {
-//               console.log('SUCCESS');
-//             } else {
-//               console.log('ERROR', err);
-//             }
-//             // client.close();
-//           });
-//         })
-//         .catch(function (err) {
-//           console.log(err);
-//           client.close();
-//         });
-//       }
-//     });
-//   });
-//   // client.close();
-// });
-
-// const intervalId = setInterval(() => {
-//   const request = testQueue.front();
-//   request.then((response) => {
-//     console.log('response', response);
-//   });
-//   testQueue.dequeue();
-//   if (testQueue.isEmpty()) {
-//     clearInterval(intervalId);
-//   }
-// }, 150);
